@@ -15,3 +15,5 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user();
     });
 });
+
+Route::apiResource('products', \App\Http\Controllers\Api\ProductController::class);
