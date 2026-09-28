@@ -17,6 +17,12 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+
+            // Thêm các cột cho trang web bán hàng:
+            $table->string('phone', 20)->nullable(); // Số điện thoại
+            $table->string('address')->nullable();   // Địa chỉ giao hàng
+            $table->tinyInteger('role')->default(0)->comment('0: Thành viên, 1: Admin');
+
             $table->rememberToken();
             $table->timestamps();
         });
