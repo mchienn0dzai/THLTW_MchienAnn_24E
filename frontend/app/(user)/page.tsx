@@ -1,71 +1,137 @@
 "use client";
 import { useEffect, useState } from "react";
-
-// Định nghĩa kiểu dữ liệu sản phẩm
-interface Product {
-  id: number;
-  name: string;
-  price: string;
-  image: string;
-}
+import { API_URL, Category, Product, finalPrice, formatVND, imageUrl } from "@/lib/api";
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [activeCat, setActiveCat] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Gọi API lấy dữ liệu từ Backend Laravel
+  // Tải danh mục 1 lần
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/products")
-      .then((res) => res.json())
-      .then((data) => setProducts(data))
-      .catch((err) => console.error("Lỗi kết nối Backend:", err));
+    fetch(`${API_URL}/api/categories`)
+      .then((r) => r.json())
+      .then(setCategories)
+      .catch(() => setError("Không kết nối được backend. Hãy chạy: php artisan serve"));
   }, []);
 
-  // Hàm xử lý khi bấm nút "Thêm vào giỏ hàng"
-  const addToCart = (product: Product) => {
-    // 1. Lấy giỏ hàng hiện tại (nếu có)
-    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-    
-    // 2. Kiểm tra xem mặt hàng này đã có trong giỏ chưa
-    const existingItem = cart.find((item: any) => item.id === product.id);
-    if (existingItem) {
-      existingItem.qty += 1; // Có rồi thì tăng số lượng
-    } else {
-      cart.push({ ...product, qty: 1 }); // Chưa có thì thêm mới
-    }
+  // Tải sản phẩm mỗi khi đổi danh mục / từ khoá
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (activeCat) params.set("category_id", String(activeCat));
+    if (search.trim()) params.set("search", search.trim());
 
-    // 3. Lưu lại vào bộ nhớ
+    setLoading(true);
+    const t = setTimeout(() => {
+      fetch(`${API_URL}/api/products?${params}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setProducts(Array.isArray(data) ? data : []);
+          setError("");
+        })
+        .catch(() => setError("Không kết nối được backend. Hãy chạy: php artisan serve"))
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [activeCat, search]);
+
+  const addToCart = (product: Product) => {
+    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+    const existing = cart.find((item: { id: number }) => item.id === product.id);
+    if (existing) {
+      existing.qty = (existing.qty ?? existing.quantity ?? 1) + 1;
+      delete existing.quantity;
+    } else {
+      cart.push({
+        id: product.id,
+        name: product.name,
+        image: product.image,
+        price: finalPrice(product),
+        qty: 1,
+      });
+    }
     localStorage.setItem("cart", JSON.stringify(cart));
-    
-    // Thông báo cho người dùng
-    alert(`Đã thêm ${product.name} vào giỏ hàng thành công!`);
+    alert(`Đã thêm ${product.name} vào giỏ hàng!`);
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Sản phẩm nổi bật</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {products.map((product) => (
-          <div key={product.id} className="bg-white p-4 rounded-lg shadow-md border hover:shadow-lg transition">
-            {/* Khung chứa ảnh */}
-            <div className="w-full h-48 bg-gray-100 flex items-center justify-center rounded mb-4 overflow-hidden">
-              <span className="text-gray-400 italic">{product.image}</span>
-            </div>
-            
-            <h2 className="text-lg font-bold text-gray-800 line-clamp-2">{product.name}</h2>
-            <p className="text-red-600 font-bold text-xl my-3">
-              {Number(product.price).toLocaleString("vi-VN")} đ
-            </p>
-            
-            <button 
-              onClick={() => addToCart(product)}
-              className="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition"
+    <div className="container mx-auto px-6 py-12">
+      <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Sản Phẩm Mới Nhất</h1>
+
+      <div className="flex flex-col md:flex-row gap-4 justify-between mb-8">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setActiveCat(null)}
+            className={`px-4 py-1.5 rounded-full border text-sm ${activeCat === null ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-100"}`}
+          >
+            Tất cả
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setActiveCat(c.id)}
+              className={`px-4 py-1.5 rounded-full border text-sm ${activeCat === c.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-100"}`}
             >
-              Thêm vào giỏ hàng 🛒
+              {c.name}
             </button>
-          </div>
-        ))}
+          ))}
+        </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Tìm sản phẩm..."
+          className="border rounded px-3 py-2 w-full md:w-64"
+        />
       </div>
+
+      {error && <div className="mb-6 text-center text-red-600 bg-red-50 p-3 rounded">{error}</div>}
+
+      {loading ? (
+        <div className="text-center text-gray-500 py-10">Đang tải sản phẩm...</div>
+      ) : products.length === 0 ? (
+        <div className="text-center text-gray-500 py-10">Không có sản phẩm nào.</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
+          {products.map((p) => {
+            const img = imageUrl(p.image);
+            const hasSale = p.sale_price && p.sale_price < p.price;
+            return (
+              <div key={p.id} className="bg-white border rounded-lg shadow-sm hover:shadow-md transition flex flex-col overflow-hidden">
+                <div className="h-48 bg-gray-100 flex items-center justify-center text-gray-400 italic overflow-hidden">
+                  {img ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={img} alt={p.name} className="w-full h-full object-cover" />
+                  ) : (
+                    "Hình ảnh sản phẩm"
+                  )}
+                </div>
+                <div className="p-5 flex flex-col flex-grow">
+                  <p className="text-xs text-gray-500 mb-1">
+                    {p.category?.name} · {p.brand?.name}
+                  </p>
+                  <h2 className="text-lg font-semibold text-gray-800 mb-2">{p.name}</h2>
+                  <div className="mb-4">
+                    <span className="text-red-600 font-bold">{formatVND(finalPrice(p))}</span>
+                    {hasSale && (
+                      <span className="ml-2 text-sm text-gray-400 line-through">{formatVND(p.price)}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => addToCart(p)}
+                    disabled={p.stock_qty <= 0}
+                    className="mt-auto w-full bg-blue-600 text-white font-medium py-2 rounded hover:bg-blue-700 transition disabled:bg-gray-400"
+                  >
+                    {p.stock_qty > 0 ? "Thêm vào giỏ hàng" : "Hết hàng"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

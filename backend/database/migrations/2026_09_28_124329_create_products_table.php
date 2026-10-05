@@ -10,7 +10,7 @@ return new class extends Migration {
             $table->foreignId('brand_id')->constrained('brands')->onDelete('cascade');
             $table->string('name');
             $table->string('slug')->unique();
-            $table->string('image');
+            $table->string('image')->nullable();
             $table->decimal('price', 15, 2);
             $table->decimal('sale_price', 15, 2)->nullable();
             $table->integer('stock_qty')->default(0);
