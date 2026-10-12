@@ -13,11 +13,21 @@ interface CartItem {
 
 export default function CartPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("cart") || "[]");
-    // Chuẩn hoá: dữ liệu cũ dùng "quantity", dữ liệu mới dùng "qty"
-    setCart(saved.map((i: CartItem & { quantity?: number }) => ({ ...i, qty: i.qty ?? i.quantity ?? 1 })));
+    // Kiểm tra đăng nhập
+    const token = localStorage.getItem("token");
+    if (token) {
+      setIsLoggedIn(true);
+      // Chỉ load giỏ hàng nếu đã đăng nhập
+      const saved = JSON.parse(localStorage.getItem("cart") || "[]");
+      setCart(saved.map((i: CartItem & { quantity?: number }) => ({ ...i, qty: i.qty ?? i.quantity ?? 1 })));
+    } else {
+      setIsLoggedIn(false);
+    }
+    setIsAuthReady(true);
   }, []);
 
   const save = (items: CartItem[]) => {
@@ -32,8 +42,27 @@ export default function CartPage() {
 
   const totalAmount = cart.reduce((t, i) => t + Number(i.price) * i.qty, 0);
 
+  // Đợi kiểm tra auth xong (tránh nhấp nháy UI)
+  if (!isAuthReady) return null; 
+
+  // Xử lý khi chưa đăng nhập
+  if (!isLoggedIn) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="bg-white p-8 rounded-lg shadow-md text-center w-full max-w-lg border">
+          <h1 className="text-2xl font-bold mb-4 text-red-600">Bạn chưa đăng nhập!</h1>
+          <p className="text-gray-600 mb-8">Vui lòng đăng nhập hệ thống để xem giỏ hàng và tiến hành đặt hàng.</p>
+          <Link href="/user/login" className="bg-blue-600 text-white font-bold py-3 px-8 rounded hover:bg-blue-700 transition">
+            Đến trang đăng nhập
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // UI Giỏ hàng (Khi đã đăng nhập)
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
+    <div className="bg-white p-6 rounded-lg shadow-md max-w-5xl mx-auto mt-6">
       <h1 className="text-2xl font-bold border-b pb-4 mb-4">Giỏ hàng của bạn</h1>
 
       {cart.length === 0 ? (
@@ -81,9 +110,9 @@ export default function CartPage() {
             <p className="text-xl font-semibold">
               Tổng thanh toán: <span className="text-red-600 text-2xl ml-2">{formatVND(totalAmount)}</span>
             </p>
-            <button className="mt-6 bg-red-600 text-white font-bold px-8 py-3 rounded hover:bg-red-700 transition">
+            <Link href="/user/checkout" className="inline-block mt-6 bg-red-600 text-white font-bold px-8 py-3 rounded hover:bg-red-700 transition">
               Tiến hành Đặt hàng
-            </button>
+            </Link>
           </div>
         </>
       )}

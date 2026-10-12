@@ -1,49 +1,29 @@
 "use client";
 import { useEffect, useState } from "react";
-import { API_URL, Category, Product, finalPrice, formatVND, imageUrl } from "@/lib/api";
+import Link from "next/link";
+import { Product, Category, API_URL, formatVND, imageUrl, finalPrice } from "@/lib/api";
 
 export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCat, setActiveCat] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  // Tải danh mục 1 lần
   useEffect(() => {
-    fetch(`${API_URL}/api/categories`)
-      .then((r) => r.json())
-      .then(setCategories)
-      .catch(() => setError("Không kết nối được backend. Hãy chạy: php artisan serve"));
+    Promise.all([
+      fetch(`${API_URL}/api/products`).then((res) => res.json()),
+      fetch(`${API_URL}/api/categories`).then((res) => res.json()),
+    ]).then(([prods, cats]) => {
+      setProducts(prods);
+      setCategories(cats);
+      setLoading(false);
+    });
   }, []);
-
-  // Tải sản phẩm mỗi khi đổi danh mục / từ khoá
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (activeCat) params.set("category_id", String(activeCat));
-    if (search.trim()) params.set("search", search.trim());
-
-    setLoading(true);
-    const t = setTimeout(() => {
-      fetch(`${API_URL}/api/products?${params}`)
-        .then((r) => r.json())
-        .then((data) => {
-          setProducts(Array.isArray(data) ? data : []);
-          setError("");
-        })
-        .catch(() => setError("Không kết nối được backend. Hãy chạy: php artisan serve"))
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [activeCat, search]);
 
   const addToCart = (product: Product) => {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-    const existing = cart.find((item: { id: number }) => item.id === product.id);
+    const existing = cart.find((item: any) => item.id === product.id);
     if (existing) {
-      existing.qty = (existing.qty ?? existing.quantity ?? 1) + 1;
-      delete existing.quantity;
+      existing.qty += 1;
     } else {
       cart.push({
         id: product.id,
@@ -57,81 +37,68 @@ export default function HomePage() {
     alert(`Đã thêm ${product.name} vào giỏ hàng!`);
   };
 
-  return (
-    <div className="container mx-auto px-6 py-12">
-      <h1 className="text-3xl font-bold text-center mb-8 text-gray-800">Sản Phẩm Mới Nhất</h1>
+  if (loading) return <div className="text-center py-20 text-xl font-semibold">Đang tải dữ liệu...</div>;
 
-      <div className="flex flex-col md:flex-row gap-4 justify-between mb-8">
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setActiveCat(null)}
-            className={`px-4 py-1.5 rounded-full border text-sm ${activeCat === null ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-100"}`}
-          >
-            Tất cả
-          </button>
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setActiveCat(c.id)}
-              className={`px-4 py-1.5 rounded-full border text-sm ${activeCat === c.id ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 hover:bg-gray-100"}`}
-            >
-              {c.name}
-            </button>
-          ))}
-        </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm sản phẩm..."
-          className="border rounded px-3 py-2 w-full md:w-64"
-        />
+  // Lọc ra các danh mục có sản phẩm
+  const activeCategories = categories.filter(cat => 
+    products.some(p => p.category_id === cat.id)
+  );
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      {/* Banner Quảng cáo (Mô phỏng) */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl shadow-xl p-10 text-white mb-12 text-center">
+        <h1 className="text-4xl font-extrabold mb-4">Chào mừng đến với E-Shop</h1>
+        <p className="text-lg opacity-90 mb-6">Khám phá những thiết bị công nghệ đỉnh cao với giá tốt nhất.</p>
+        <Link href="/categories" className="bg-white text-blue-700 px-8 py-3 rounded-full font-bold hover:bg-gray-100 transition shadow-lg">
+          Khám phá ngay
+        </Link>
       </div>
 
-      {error && <div className="mb-6 text-center text-red-600 bg-red-50 p-3 rounded">{error}</div>}
+      {/* Hiển thị sản phẩm theo từng danh mục */}
+      {activeCategories.map((category) => {
+        // Lấy 4 sản phẩm mới nhất của danh mục này
+        const categoryProducts = products
+          .filter(p => p.category_id === category.id)
+          .slice(0, 4);
 
-      {loading ? (
-        <div className="text-center text-gray-500 py-10">Đang tải sản phẩm...</div>
-      ) : products.length === 0 ? (
-        <div className="text-center text-gray-500 py-10">Không có sản phẩm nào.</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
-          {products.map((p) => {
-            const img = imageUrl(p.image);
-            const hasSale = p.sale_price && p.sale_price < p.price;
-            return (
-              <div key={p.id} className="bg-white border rounded-lg shadow-sm hover:shadow-md transition flex flex-col overflow-hidden">
-                <div className="h-48 bg-gray-100 flex items-center justify-center text-gray-400 italic overflow-hidden">
-                  {img ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={img} alt={p.name} className="w-full h-full object-cover" />
-                  ) : (
-                    "Hình ảnh sản phẩm"
-                  )}
-                </div>
-                <div className="p-5 flex flex-col flex-grow">
-                  <p className="text-xs text-gray-500 mb-1">
-                    {p.category?.name} · {p.brand?.name}
-                  </p>
-                  <h2 className="text-lg font-semibold text-gray-800 mb-2">{p.name}</h2>
-                  <div className="mb-4">
-                    <span className="text-red-600 font-bold">{formatVND(finalPrice(p))}</span>
-                    {hasSale && (
-                      <span className="ml-2 text-sm text-gray-400 line-through">{formatVND(p.price)}</span>
-                    )}
+        return (
+          <div key={category.id} className="mb-12">
+            <div className="flex justify-between items-center mb-6 border-b pb-2">
+              <h2 className="text-2xl font-bold text-gray-800 uppercase border-l-4 border-blue-600 pl-3">
+                {category.name} Nổi Bật
+              </h2>
+              <Link href={`/categories?cat=${category.id}`} className="text-blue-600 hover:underline font-medium">
+                Xem tất cả &rarr;
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {categoryProducts.map((product) => (
+                <div key={product.id} className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-shadow flex flex-col group">
+                  <div className="h-48 bg-gray-50 flex justify-center items-center p-4 relative overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imageUrl(product.image) || ""} alt={product.name} className="max-h-full object-contain group-hover:scale-110 transition-transform duration-300" />
                   </div>
-                  <button
-                    onClick={() => addToCart(p)}
-                    disabled={p.stock_qty <= 0}
-                    className="mt-auto w-full bg-blue-600 text-white font-medium py-2 rounded hover:bg-blue-700 transition disabled:bg-gray-400"
-                  >
-                    {p.stock_qty > 0 ? "Thêm vào giỏ hàng" : "Hết hàng"}
-                  </button>
+                  <div className="p-4 flex flex-col flex-grow">
+                    <h3 className="font-semibold text-gray-800 text-lg mb-1 line-clamp-2" title={product.name}>{product.name}</h3>
+                    <p className="text-xs text-gray-500 mb-2">{category.name}</p>
+                    <div className="mt-auto">
+                      <div className="text-red-600 font-bold text-xl">{formatVND(finalPrice(product))}</div>
+                      {product.sale_price && product.sale_price > 0 && (
+                        <div className="text-sm text-gray-400 line-through">{formatVND(product.price)}</div>
+                      )}
+                      <button onClick={() => addToCart(product)} className="w-full mt-4 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 transition">
+                        Thêm vào giỏ
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

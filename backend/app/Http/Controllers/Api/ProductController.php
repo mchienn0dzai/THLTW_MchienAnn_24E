@@ -11,30 +11,18 @@ use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
-    /**
-     * GET /api/products
-     * Tham số tuỳ chọn: ?category_id=1  ?brand_id=2  ?search=iphone
-     * Trả về MẢNG sản phẩm (kèm category, brand) để frontend dùng trực tiếp.
-     */
     public function index(Request $request): JsonResponse
     {
         $query = Product::with(['category:id,name,slug', 'brand:id,name,slug'])
             ->latest('id');
 
-        if ($request->filled('category_id')) {
-            $query->where('category_id', $request->category_id);
-        }
-        if ($request->filled('brand_id')) {
-            $query->where('brand_id', $request->brand_id);
-        }
-        if ($request->filled('search')) {
-            $query->where('name', 'like', '%' . $request->search . '%');
-        }
+        if ($request->filled('category_id')) $query->where('category_id', $request->category_id);
+        if ($request->filled('brand_id')) $query->where('brand_id', $request->brand_id);
+        if ($request->filled('search')) $query->where('name', 'like', '%' . $request->search . '%');
 
         return response()->json($query->get(), 200);
     }
 
-    /** POST /api/products */
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -59,23 +47,17 @@ class ProductController extends Controller
         return response()->json(['message' => 'Thêm thành công', 'data' => $product], 201);
     }
 
-    /** GET /api/products/{id} */
     public function show($id): JsonResponse
     {
         $product = Product::with(['category', 'brand', 'details'])->find($id);
-        if (!$product) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
-        }
+        if (!$product) return response()->json(['message' => 'Không tìm thấy'], 404);
         return response()->json($product, 200);
     }
 
-    /** PUT/PATCH /api/products/{id} */
     public function update(Request $request, $id): JsonResponse
     {
         $product = Product::find($id);
-        if (!$product) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
-        }
+        if (!$product) return response()->json(['message' => 'Không tìm thấy'], 404);
 
         $data = $request->validate([
             'category_id' => ['sometimes', 'required', 'integer', 'exists:categories,id'],
@@ -102,17 +84,40 @@ class ProductController extends Controller
         ], 200);
     }
 
-    /** DELETE /api/products/{id} */
     public function destroy($id): JsonResponse
     {
         $product = Product::find($id);
-        if (!$product) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
-        }
+        if (!$product) return response()->json(['message' => 'Không tìm thấy'], 404);
 
-        $product->delete();
-        return response()->json(['message' => 'Đã xóa thành công'], 200);
+        $product->delete(); // Lệnh này đưa vào Thùng rác (Soft Delete)
+        return response()->json(['message' => 'Đã đưa sản phẩm vào thùng rác'], 200);
     }
+
+    // --- CÁC HÀM CHO THÙNG RÁC ---
+    public function trash(): JsonResponse
+    {
+        $products = Product::onlyTrashed()->with(['category', 'brand'])->orderBy('deleted_at', 'desc')->get();
+        return response()->json($products, 200);
+    }
+
+    public function restore($id): JsonResponse
+    {
+        $product = Product::onlyTrashed()->find($id);
+        if (!$product) return response()->json(['message' => 'Không tìm thấy'], 404);
+        
+        $product->restore();
+        return response()->json(['message' => 'Khôi phục sản phẩm thành công'], 200);
+    }
+
+    public function forceDelete($id): JsonResponse
+    {
+        $product = Product::onlyTrashed()->find($id);
+        if (!$product) return response()->json(['message' => 'Không tìm thấy'], 404);
+        
+        $product->forceDelete();
+        return response()->json(['message' => 'Đã xóa vĩnh viễn'], 200);
+    }
+    // -----------------------------
 
     private function uniqueSlug(string $source, ?int $ignoreId = null): string
     {

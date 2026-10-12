@@ -76,16 +76,41 @@ class CategoryController extends Controller
             return response()->json(['message' => 'Không tìm thấy'], 404);
         }
 
-        // Migration đặt products.category_id ON DELETE CASCADE nên xoá danh mục sẽ xoá luôn sản phẩm.
         if ($category->products()->exists()) {
             return response()->json([
                 'message' => 'Danh mục đang có sản phẩm, hãy chuyển hoặc xoá sản phẩm trước.'
             ], 409);
         }
 
-        $category->delete();
-        return response()->json(['message' => 'Đã xóa danh mục'], 200);
+        $category->delete(); // Lệnh này giờ sẽ đưa vào Thùng rác (Soft Delete)
+        return response()->json(['message' => 'Đã đưa danh mục vào thùng rác'], 200);
     }
+
+    // --- CÁC HÀM CHO THÙNG RÁC ---
+    public function trash(): JsonResponse
+    {
+        $categories = Category::onlyTrashed()->orderBy('deleted_at', 'desc')->get();
+        return response()->json($categories, 200);
+    }
+
+    public function restore($id): JsonResponse
+    {
+        $category = Category::onlyTrashed()->find($id);
+        if (!$category) return response()->json(['message' => 'Không tìm thấy'], 404);
+        
+        $category->restore();
+        return response()->json(['message' => 'Khôi phục danh mục thành công'], 200);
+    }
+
+    public function forceDelete($id): JsonResponse
+    {
+        $category = Category::onlyTrashed()->find($id);
+        if (!$category) return response()->json(['message' => 'Không tìm thấy'], 404);
+        
+        $category->forceDelete();
+        return response()->json(['message' => 'Đã xóa vĩnh viễn'], 200);
+    }
+    // -----------------------------
 
     private function uniqueSlug(string $source): string
     {
