@@ -49,8 +49,12 @@ class ProductController extends Controller
 
     public function show($id): JsonResponse
     {
-        $product = Product::with(['category', 'brand', 'details'])->find($id);
-        if (!$product) return response()->json(['message' => 'Không tìm thấy'], 404);
+        // Đã xóa 'details' khỏi lệnh truy vấn để tránh lỗi sập Backend
+        $product = Product::with(['category', 'brand'])->find($id);
+        
+        if (!$product) {
+            return response()->json(['message' => 'Không tìm thấy'], 404);
+        }
         return response()->json($product, 200);
     }
 
@@ -89,7 +93,7 @@ class ProductController extends Controller
         $product = Product::find($id);
         if (!$product) return response()->json(['message' => 'Không tìm thấy'], 404);
 
-        $product->delete(); // Lệnh này đưa vào Thùng rác (Soft Delete)
+        $product->delete(); 
         return response()->json(['message' => 'Đã đưa sản phẩm vào thùng rác'], 200);
     }
 
@@ -117,7 +121,6 @@ class ProductController extends Controller
         $product->forceDelete();
         return response()->json(['message' => 'Đã xóa vĩnh viễn'], 200);
     }
-    // -----------------------------
 
     private function uniqueSlug(string $source, ?int $ignoreId = null): string
     {

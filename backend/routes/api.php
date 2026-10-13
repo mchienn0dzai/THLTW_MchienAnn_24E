@@ -33,9 +33,19 @@ Route::apiResource('brands', BrandController::class);
 // --- Đơn hàng ---
 Route::post('/checkout', [OrderController::class, 'checkout']);
 Route::get('/orders', [OrderController::class, 'index']);
+
+use App\Http\Controllers\Api\DashboardController;
+Route::get('/dashboard', [DashboardController::class, 'index']);
 Route::put('/orders/{id}/status', [OrderController::class, 'updateStatus']);
 
 use App\Http\Controllers\Api\ContactController;
 Route::post('/contacts', [ContactController::class, 'store']);
 Route::get('/contacts', [ContactController::class, 'index']);
 Route::put('/contacts/{id}/status', [ContactController::class, 'updateStatus']);
+
+use App\Http\Controllers\Api\PostController;
+use App\Http\Controllers\Api\AdminUserController;
+
+Route::apiResource('posts', PostController::class);
+Route::get('/admin/users', [AdminUserController::class, 'index']);
+Route::put('/admin/users/{id}/block', [AdminUserController::class, 'toggleBlock']);
