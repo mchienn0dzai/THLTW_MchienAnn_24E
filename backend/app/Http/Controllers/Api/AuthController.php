@@ -6,66 +6,61 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use App\Http\Requests\RegisterRequest;
-use App\Http\Requests\LoginRequest;
 
 class AuthController extends Controller
 {
-    // API Đăng ký tài khoản
-    public function register(RegisterRequest $request)
+    public function register(Request $request)
     {
-        $user = User::create([
-            'name'     => $request->name,
-            'email'    => $request->email,
-            'password' => Hash::make($request->password), // Mã hóa mật khẩu
-            'phone'    => $request->phone,
-            'address'  => $request->address,
-            'role'     => 0 // Mặc định 0 là Khách hàng
+        $data = $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6',
+            'phone'    => 'nullable|string|max:20',
+            'address'  => 'nullable|string|max:255',
         ]);
 
-        // Tạo token đăng nhập
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $user = User::create([
+            'name'       => $data['name'],
+            'email'      => $data['email'],
+            'password'   => Hash::make($data['password']),
+            'phone'      => $data['phone'] ?? null,
+            'address'    => $data['address'] ?? null,
+            'role'       => 'customer',
+            'is_blocked' => false,
+        ]);
 
         return response()->json([
-            'message' => 'Đăng ký tài khoản thành công!',
-            'data'    => $user,
-            'token'   => $token
+            'message' => 'Đăng ký thành công',
+            'user'    => $user,
         ], 201);
     }
 
-    // API Đăng nhập
-    public function login(LoginRequest $request)
+    public function login(Request $request)
     {
-        // 1. Tìm user theo email
-        $user = User::where('email', $request->email)->first();
+        $data = $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required|string',
+        ]);
 
-        // 2. Kiểm tra user có tồn tại và mật khẩu có khớp không
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json([
-                'message' => 'Email hoặc mật khẩu không chính xác!'
-            ], 401);
+        $user = User::where('email', $data['email'])->first();
+
+        if (!$user || !Hash::check($data['password'], $user->password)) {
+            return response()->json(['message' => 'Email hoặc mật khẩu không chính xác!'], 401);
         }
 
-        // 3. Xóa token cũ (nếu muốn mỗi tài khoản chỉ đăng nhập 1 thiết bị)
-        $user->tokens()->delete(); 
+        // KIỂM TRA KHÓA TÀI KHOẢN THẬT SỰ
+        if ($user->is_blocked) {
+            return response()->json([
+                'message' => 'Tài khoản của bạn đã bị Quản trị viên khóa! Vui lòng liên hệ hỗ trợ.'
+            ], 403);
+        }
 
-        // 4. Tạo token mới
-        $token = $user->createToken('auth_token')->plainTextToken;
+        $token = method_exists($user, 'createToken') ? $user->createToken('auth_token')->plainTextToken : 'demo-token-' . $user->id;
 
         return response()->json([
-            'message' => 'Đăng nhập thành công!',
-            'data'    => $user,
-            'token'   => $token
-        ], 200);
-    }
-
-    // API Đăng xuất (Cần gửi kèm Token)
-    public function logout(Request $request)
-    {
-        $request->user()->currentAccessToken()->delete();
-        
-        return response()->json([
-            'message' => 'Đã đăng xuất thành công!'
+            'message' => 'Đăng nhập thành công',
+            'token'   => $token,
+            'user'    => $user,
         ], 200);
     }
 }

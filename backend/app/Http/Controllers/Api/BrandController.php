@@ -4,75 +4,73 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Brand;
-use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class BrandController extends Controller
 {
-    public function index(): JsonResponse
+    public function __construct()
     {
-        return response()->json(Brand::withCount('products')->orderBy('name')->get(), 200);
+        if (Schema::hasTable('brands') && !Schema::hasColumn('brands', 'deleted_at')) {
+            Schema::table('brands', function (Blueprint $table) {
+                $table->softDeletes();
+            });
+        }
     }
 
-    public function store(Request $request): JsonResponse
+    public function index()
     {
-        $data = $request->validate([
-            'name'   => ['required', 'string', 'max:255'],
-            'slug'   => ['nullable', 'string', 'max:255', 'unique:brands,slug'],
-            'image'  => ['nullable', 'string', 'max:255'],
-            'status' => ['nullable', 'boolean'],
-        ]);
+        return response()->json(Brand::withCount('products')->latest('id')->get(), 200);
+    }
 
-        $base = Str::slug($data['slug'] ?? $data['name']) ?: 'thuong-hieu';
-        $slug = $base;
+    public function store(Request $request)
+    {
+        $data = $request->validate(['name' => 'required|string|max:255']);
+        $slug = Str::slug($data['name']) ?: 'thuong-hieu';
         $i = 2;
-        while (Brand::where('slug', $slug)->exists()) {
-            $slug = $base . '-' . $i++;
+        while (Brand::withTrashed()->where('slug', $slug)->exists()) {
+            $slug = Str::slug($data['name']) . '-' . $i++;
         }
-        $data['slug']   = $slug;
-        $data['status'] = $data['status'] ?? true;
-
-        return response()->json(['message' => 'Thêm thương hiệu thành công', 'data' => Brand::create($data)], 201);
+        $brand = Brand::create(['name' => $data['name'], 'slug' => $slug]);
+        return response()->json($brand, 201);
     }
 
-    public function show($id): JsonResponse
+    public function update(Request $request, $id)
     {
-        $brand = Brand::find($id);
-        return $brand
-            ? response()->json($brand, 200)
-            : response()->json(['message' => 'Không tìm thấy'], 404);
+        $brand = Brand::findOrFail($id);
+        $data = $request->validate(['name' => 'required|string|max:255']);
+        $brand->update(['name' => $data['name']]);
+        return response()->json($brand, 200);
     }
 
-    public function update(Request $request, $id): JsonResponse
+    public function destroy($id)
     {
         $brand = Brand::find($id);
-        if (!$brand) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
-        }
-
-        $data = $request->validate([
-            'name'   => ['sometimes', 'required', 'string', 'max:255'],
-            'slug'   => ['nullable', 'string', 'max:255', Rule::unique('brands', 'slug')->ignore($brand->id)],
-            'image'  => ['nullable', 'string', 'max:255'],
-            'status' => ['nullable', 'boolean'],
-        ]);
-
-        $brand->update($data);
-        return response()->json(['message' => 'Sửa thương hiệu thành công', 'data' => $brand], 200);
-    }
-
-    public function destroy($id): JsonResponse
-    {
-        $brand = Brand::find($id);
-        if (!$brand) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
-        }
-        if ($brand->products()->exists()) {
-            return response()->json(['message' => 'Thương hiệu đang có sản phẩm, không thể xoá.'], 409);
-        }
+        if (!$brand) return response()->json(['message' => 'Không tìm thấy'], 404);
         $brand->delete();
-        return response()->json(['message' => 'Đã xóa thương hiệu'], 200);
+        return response()->json(['message' => 'Đã đưa thương hiệu vào thùng rác'], 200);
+    }
+
+    public function trash()
+    {
+        return response()->json(Brand::onlyTrashed()->orderBy('deleted_at', 'desc')->get(), 200);
+    }
+
+    public function restore($id)
+    {
+        $brand = Brand::onlyTrashed()->find($id);
+        if (!$brand) return response()->json(['message' => 'Không tìm thấy'], 404);
+        $brand->restore();
+        return response()->json(['message' => 'Đã khôi phục thương hiệu'], 200);
+    }
+
+    public function forceDelete($id)
+    {
+        $brand = Brand::onlyTrashed()->find($id);
+        if (!$brand) return response()->json(['message' => 'Không tìm thấy'], 404);
+        $brand->forceDelete();
+        return response()->json(['message' => 'Đã xóa vĩnh viễn thương hiệu'], 200);
     }
 }

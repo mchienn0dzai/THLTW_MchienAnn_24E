@@ -1,128 +1,128 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatVND, API_URL } from "@/lib/api";
+import { API_URL, formatVND } from "@/lib/api";
 
 export default function CheckoutPage() {
+  const router = useRouter();
   const [cart, setCart] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("COD");
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    payment_method: "COD",
+  });
 
   useEffect(() => {
-    const savedCart = JSON.parse(localStorage.getItem("cart") || "[]");
-    const savedUser = JSON.parse(localStorage.getItem("user") || "null");
-
-    if (!savedUser) {
-      alert("Vui lòng đăng nhập để thanh toán!");
-      router.push("/user/login");
-      return;
+    setCart(JSON.parse(localStorage.getItem("cart") || "[]"));
+    const savedUser = localStorage.getItem("user");
+    if (savedUser) {
+      const u = JSON.parse(savedUser);
+      setUser(u);
+      setFormData((prev) => ({
+        ...prev,
+        name: u.name || "",
+        email: u.email || "",
+        phone: u.phone || "",
+        address: u.address || "",
+      }));
     }
-    if (savedCart.length === 0) {
-      alert("Giỏ hàng trống!");
-      router.push("/");
-      return;
-    }
+  }, []);
 
-    setCart(savedCart);
-    setUser(savedUser);
-  }, [router]);
+  const totalAmount = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
 
-  const totalAmount = cart.reduce((t, i) => t + Number(i.price) * i.qty, 0);
-
-  const handleCheckout = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (cart.length === 0) return alert("Giỏ hàng trống!");
 
-    try {
-      const response = await fetch(`${API_URL}/api/checkout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          total_amount: totalAmount,
-          shipping_address: address,
-          phone: phone,
-          payment_method: paymentMethod,
-          items: cart
-        }),
-      });
+    const res = await fetch(`${API_URL}/api/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({
+        ...formData,
+        user_id: user?.id || null,
+        total_amount: totalAmount,
+        items: cart,
+      }),
+    });
 
-      const data = await response.json();
-      if (response.ok) {
-        alert("Đặt hàng thành công!");
-        localStorage.removeItem("cart"); // Xóa giỏ hàng sau khi đặt thành công
-        router.push("/"); // Chuyển về trang chủ hoặc trang lịch sử đơn hàng
-      } else {
-        alert(data.message || "Đặt hàng thất bại.");
-      }
-    } catch (error) {
-      alert("Lỗi kết nối máy chủ.");
-    } finally {
-      setLoading(false);
+    const data = await res.json();
+    if (res.ok) {
+      alert(`🎉 Đặt hàng thành công! Thông tin xác nhận đơn hàng đã được ghi nhận cho email: ${formData.email}`);
+      localStorage.removeItem("cart");
+      router.push(user ? "/user/profile" : "/");
+    } else {
+      alert(data.message || "Đặt hàng thất bại!");
     }
   };
 
-  if (!user || cart.length === 0) return null;
-
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4">
-      <h1 className="text-3xl font-bold mb-8">Thanh toán đơn hàng</h1>
-      
+    <div className="container mx-auto px-4 py-10 max-w-5xl">
+      <h1 className="text-3xl font-bold mb-8 text-center text-blue-600">Thanh toán Đơn hàng</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Form nhập thông tin */}
-        <div className="bg-white p-6 rounded-lg shadow-md border">
-          <h2 className="text-xl font-semibold mb-4 border-b pb-2">Thông tin giao hàng</h2>
-          <form onSubmit={handleCheckout} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Người nhận</label>
-              <input type="text" value={user.name} disabled className="w-full border p-2 rounded bg-gray-100" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Số điện thoại</label>
-              <input type="text" required value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full border p-2 rounded focus:ring-blue-500 focus:border-blue-500" placeholder="Nhập số điện thoại" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Địa chỉ nhận hàng</label>
-              <textarea required value={address} onChange={(e) => setAddress(e.target.value)} className="w-full border p-2 rounded focus:ring-blue-500 focus:border-blue-500" rows={3} placeholder="Nhập địa chỉ chi tiết"></textarea>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Phương thức thanh toán</label>
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full border p-2 rounded">
-                <option value="COD">Thanh toán khi nhận hàng (COD)</option>
-                <option value="BankTransfer">Chuyển khoản ngân hàng</option>
-              </select>
-            </div>
-            
-            <button type="submit" disabled={loading} className="w-full mt-4 bg-red-600 text-white font-bold py-3 rounded hover:bg-red-700 transition">
-              {loading ? "Đang xử lý..." : "Xác nhận đặt hàng"}
-            </button>
-          </form>
-        </div>
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-2xl shadow-md border space-y-4">
+          <h2 className="text-xl font-bold border-b pb-2">Thông tin người nhận</h2>
+          <div>
+            <label className="block text-sm font-medium mb-1">Họ và tên *</label>
+            <input required type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full border p-2.5 rounded-lg" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Email nhận hóa đơn điện tử *</label>
+            <input required type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="example@gmail.com" className="w-full border p-2.5 rounded-lg" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Số điện thoại *</label>
+            <input required type="text" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full border p-2.5 rounded-lg" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Địa chỉ giao hàng *</label>
+            <input required type="text" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="w-full border p-2.5 rounded-lg" />
+          </div>
 
-        {/* Tóm tắt đơn hàng */}
-        <div className="bg-gray-50 p-6 rounded-lg shadow-md border h-fit">
-          <h2 className="text-xl font-semibold mb-4 border-b pb-2">Tóm tắt đơn hàng</h2>
-          <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
-            {cart.map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center text-sm">
+          <div>
+            <label className="block text-sm font-medium mb-1">Phương thức thanh toán *</label>
+            <select value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} className="w-full border p-2.5 rounded-lg font-semibold">
+              <option value="COD">Thanh toán khi nhận hàng (COD)</option>
+              <option value="ONLINE_QR">Thanh toán Online (Chuyển khoản VietQR / VNPAY)</option>
+            </select>
+          </div>
+
+          {/* HIỂN THỊ MÃ QR KHI CHỌN THANH TOÁN ONLINE */}
+          {formData.payment_method === "ONLINE_QR" && (
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 text-center space-y-2">
+              <p className="font-bold text-blue-800 text-sm">Quét mã VietQR để thanh toán Online</p>
+              <img
+                src={`https://img.vietqr.io/image/MB-0399069615-compact2.png?amount=${totalAmount}&addInfo=ESHOP%20THANH%20TOAN`}
+                alt="VietQR"
+                className="w-48 mx-auto rounded-lg border shadow-sm"
+              />
+              <p className="text-xs text-gray-600">Số tiền: <strong className="text-red-600">{formatVND(totalAmount)}</strong></p>
+            </div>
+          )}
+
+          <button type="submit" className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold text-lg hover:bg-blue-700">
+            XÁC NHẬN ĐẶT HÀNG
+          </button>
+        </form>
+
+        <div className="bg-white p-6 rounded-2xl shadow-md border h-fit">
+          <h2 className="text-xl font-bold border-b pb-2 mb-4">Đơn hàng của bạn ({cart.length} món)</h2>
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+            {cart.map((item) => (
+              <div key={item.id} className="flex justify-between items-center border-b pb-2 text-sm">
                 <div>
-                  <p className="font-medium">{item.name}</p>
-                  <p className="text-gray-500">SL: {item.qty}</p>
+                  <div className="font-semibold">{item.name}</div>
+                  <div className="text-xs text-gray-500">Số lượng: {item.qty}</div>
                 </div>
-                <div className="font-semibold text-gray-700">{formatVND(item.price * item.qty)}</div>
+                <div className="font-bold text-red-600">{formatVND(item.price * item.qty)}</div>
               </div>
             ))}
           </div>
-          <div className="border-t pt-4 flex justify-between items-center">
-            <span className="font-bold text-lg">Tổng cộng:</span>
-            <span className="font-bold text-2xl text-red-600">{formatVND(totalAmount)}</span>
+          <div className="flex justify-between items-center text-xl font-extrabold text-red-600 pt-4 border-t mt-4">
+            <span>Tổng thanh toán:</span>
+            <span>{formatVND(totalAmount)}</span>
           </div>
         </div>
       </div>

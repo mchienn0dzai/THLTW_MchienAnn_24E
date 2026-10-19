@@ -1,62 +1,65 @@
 "use client";
-import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { API_URL } from "@/lib/api";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/login", {
+      const res = await fetch(`${API_URL}/api/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+      const data = await res.json();
 
-      const data = await response.json();
-
-      if (response.ok) {
-        localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.data));
-        
-        if (data.data.role === 1) {
-          router.push("/admin");
-        } else {
-          router.push("/"); // Chuyển về trang chủ
-        }
-      } else {
-        setError(data.message || "Đăng nhập thất bại.");
+      if (!res.ok) {
+        setError(data.message || "Đăng nhập thất bại!");
+        return;
       }
-    } catch (err) {
-      setError("Không thể kết nối đến máy chủ.");
+
+      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("token", data.token || "");
+
+      // Phân quyền điều hướng theo sơ đồ Giảng viên: Admin -> /admin, User -> /user/profile
+      if (data.user.role === "admin" || data.user.email?.includes("admin")) {
+        window.location.href = "/admin";
+      } else {
+        window.location.href = "/user/profile";
+      }
+    } catch {
+      setError("Lỗi kết nối máy chủ!");
     }
   };
 
   return (
-    <div className="flex justify-center items-center py-12">
-      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md border">
-        <h1 className="text-2xl font-bold text-center mb-6 text-gray-800">Đăng nhập hệ thống</h1>
-        
-        {error && <div className="mb-4 text-red-500 text-sm text-center bg-red-50 p-2 rounded">{error}</div>}
-
-        <form className="space-y-4" onSubmit={handleLogin}>
-          <div><label className="block text-sm mb-1">Email</label><input type="email" className="w-full border p-2 rounded" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-          <div><label className="block text-sm mb-1">Mật khẩu</label><input type="password" className="w-full border p-2 rounded" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-          
-          <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700">Đăng nhập</button>
+    <div className="container mx-auto px-4 py-16 flex justify-center">
+      <div className="bg-white p-8 rounded-2xl shadow-lg border w-full max-w-md">
+        <h1 className="text-2xl font-bold text-center text-blue-600 mb-6">Đăng nhập Tài khoản</h1>
+        {error && <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4 text-sm font-semibold">{error}</div>}
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Email *</label>
+            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border p-2.5 rounded-lg" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Mật khẩu *</label>
+            <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border p-2.5 rounded-lg" />
+          </div>
+          <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700">
+            Đăng nhập
+          </button>
         </form>
-
-        <p className="mt-4 text-center text-sm text-gray-600">
-          Chưa có tài khoản? 
-          {/* Sửa đường dẫn link sang /user/register */}
-          <Link href="/user/register" className="text-blue-600 hover:underline"> Đăng ký ngay</Link>
+        <p className="text-center text-sm text-gray-500 mt-4">
+          Chưa có tài khoản? <Link href="/user/register" className="text-blue-600 font-semibold hover:underline">Đăng ký ngay</Link>
         </p>
       </div>
     </div>

@@ -4,122 +4,75 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
-use Illuminate\Http\JsonResponse;
+use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
-    public function index(): JsonResponse
+    public function index()
     {
-        $categories = Category::withCount('products')
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->get();
-
-        return response()->json($categories, 200);
+        return response()->json(Category::withCount('products')->latest('id')->get(), 200);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request)
     {
-        $data = $request->validate([
-            'parent_id'  => ['nullable', 'integer', 'exists:categories,id'],
-            'name'       => ['required', 'string', 'max:255'],
-            'slug'       => ['nullable', 'string', 'max:255', 'unique:categories,slug'],
-            'sort_order' => ['nullable', 'integer'],
-            'status'     => ['nullable', 'boolean'],
-        ]);
-
-        $data['slug']       = $this->uniqueSlug($data['slug'] ?? $data['name']);
-        $data['sort_order'] = $data['sort_order'] ?? 0;
-        $data['status']     = $data['status'] ?? true;
-
-        $category = Category::create($data);
-
-        return response()->json(['message' => 'Thêm danh mục thành công', 'data' => $category], 201);
-    }
-
-    public function show($id): JsonResponse
-    {
-        $category = Category::with('products')->find($id);
-        if (!$category) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
+        $data = $request->validate(['name' => 'required|string|max:255']);
+        $slug = Str::slug($data['name']) ?: 'danh-muc';
+        $i = 2;
+        while (Category::withTrashed()->where('slug', $slug)->exists()) {
+            $slug = Str::slug($data['name']) . '-' . $i++;
         }
-        return response()->json($category, 200);
+        $cat = Category::create(['name' => $data['name'], 'slug' => $slug]);
+        return response()->json($cat, 201);
     }
 
-    public function update(Request $request, $id): JsonResponse
+    public function update(Request $request, $id)
     {
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
-        }
-
-        $data = $request->validate([
-            'parent_id'  => ['nullable', 'integer', 'exists:categories,id', Rule::notIn([$category->id])],
-            'name'       => ['sometimes', 'required', 'string', 'max:255'],
-            'slug'       => ['nullable', 'string', 'max:255', Rule::unique('categories', 'slug')->ignore($category->id)],
-            'sort_order' => ['nullable', 'integer'],
-            'status'     => ['nullable', 'boolean'],
-        ]);
-
-        $category->update($data);
-
-        return response()->json(['message' => 'Sửa danh mục thành công', 'data' => $category], 200);
+        $cat = Category::findOrFail($id);
+        $data = $request->validate(['name' => 'required|string|max:255']);
+        $cat->update(['name' => $data['name']]);
+        return response()->json($cat, 200);
     }
 
-    public function destroy($id): JsonResponse
+    public function destroy($id)
     {
-        $category = Category::find($id);
-        if (!$category) {
-            return response()->json(['message' => 'Không tìm thấy'], 404);
-        }
+        $cat = Category::find($id);
+        if (!$cat) return response()->json(['message' => 'Không tìm thấy danh mục'], 404);
 
-        if ($category->products()->exists()) {
+        $productCount = Product::withTrashed()->where('category_id', $id)->count();
+        if ($productCount > 0) {
             return response()->json([
-                'message' => 'Danh mục đang có sản phẩm, hãy chuyển hoặc xoá sản phẩm trước.'
-            ], 409);
+                'message' => "Không thể xóa! Danh mục này đang chứa {$productCount} sản phẩm (liên quan đến đơn hàng)."
+            ], 400);
         }
 
-        $category->delete(); // Lệnh này giờ sẽ đưa vào Thùng rác (Soft Delete)
+        $cat->delete();
         return response()->json(['message' => 'Đã đưa danh mục vào thùng rác'], 200);
     }
 
-    // --- CÁC HÀM CHO THÙNG RÁC ---
-    public function trash(): JsonResponse
+    public function trash()
     {
-        $categories = Category::onlyTrashed()->orderBy('deleted_at', 'desc')->get();
-        return response()->json($categories, 200);
+        return response()->json(Category::onlyTrashed()->orderBy('deleted_at', 'desc')->get(), 200);
     }
 
-    public function restore($id): JsonResponse
+    public function restore($id)
     {
-        $category = Category::onlyTrashed()->find($id);
-        if (!$category) return response()->json(['message' => 'Không tìm thấy'], 404);
-        
-        $category->restore();
+        $cat = Category::onlyTrashed()->find($id);
+        if (!$cat) return response()->json(['message' => 'Không tìm thấy'], 404);
+        $cat->restore();
         return response()->json(['message' => 'Khôi phục danh mục thành công'], 200);
     }
 
-    public function forceDelete($id): JsonResponse
+    public function forceDelete($id)
     {
-        $category = Category::onlyTrashed()->find($id);
-        if (!$category) return response()->json(['message' => 'Không tìm thấy'], 404);
-        
-        $category->forceDelete();
-        return response()->json(['message' => 'Đã xóa vĩnh viễn'], 200);
-    }
-    // -----------------------------
-
-    private function uniqueSlug(string $source): string
-    {
-        $base = Str::slug($source) ?: 'danh-muc';
-        $slug = $base;
-        $i = 2;
-        while (Category::where('slug', $slug)->exists()) {
-            $slug = $base . '-' . $i++;
+        $cat = Category::onlyTrashed()->find($id);
+        if (!$cat) return response()->json(['message' => 'Không tìm thấy'], 404);
+        $productCount = Product::withTrashed()->where('category_id', $id)->count();
+        if ($productCount > 0) {
+            return response()->json(['message' => 'Không thể xóa vĩnh viễn vì vẫn còn sản phẩm thuộc danh mục này!'], 400);
         }
-        return $slug;
+        $cat->forceDelete();
+        return response()->json(['message' => 'Đã xóa vĩnh viễn danh mục'], 200);
     }
 }
