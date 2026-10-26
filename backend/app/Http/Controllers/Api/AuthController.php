@@ -25,7 +25,8 @@ class AuthController extends Controller
             'password'   => Hash::make($data['password']),
             'phone'      => $data['phone'] ?? null,
             'address'    => $data['address'] ?? null,
-            'role'       => 'customer',
+            // ĐÃ SỬA LỖI Ở ĐÂY: Lưu role là số 0 thay vì chữ 'customer'
+            'role'       => 0, 
             'is_blocked' => false,
         ]);
 
@@ -53,6 +54,13 @@ class AuthController extends Controller
             return response()->json([
                 'message' => 'Tài khoản của bạn đã bị Quản trị viên khóa! Vui lòng liên hệ hỗ trợ.'
             ], 403);
+        }
+
+        // Đồng bộ phân quyền cho Frontend (nếu role = 1 thì đổi thành chữ 'admin')
+        if ($user->role == 1) {
+            $user->role = 'admin';
+        } else {
+            $user->role = 'customer';
         }
 
         $token = method_exists($user, 'createToken') ? $user->createToken('auth_token')->plainTextToken : 'demo-token-' . $user->id;
